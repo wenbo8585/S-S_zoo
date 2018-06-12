@@ -1,0 +1,24 @@
+  Oxford：http://www.robots.ox.ac.uk/~vgg/data/oxbuildings/oxbuild_images.tgz   
+
+                                     下载后放在.data/images/oxford目录下，解压命名文件夹为：data
+
+                           解压后共5063张图像在retrieval-2016-deepvision-master/data/images/oxford/data目录下
+
+                           http://www.robots.ox.ac.uk/~vgg/data/oxbuildings/gt_files_170407.tgz  
+
+                                     下载后放在.data/images/oxford目录下，解压命名文件夹为：groundtruth
+
+            Paris：   http://www.robots.ox.ac.uk/~vgg/data/parisbuildings/paris_1.tgz
+                           http://www.robots.ox.ac.uk/~vgg/data/parisbuildings/paris_2.tgz      
+
+                                     两个文件下载后放在.data/images/paris目录下，解压合并，命名文件夹为：data
+
+                           解压后共6412张图像分为12个文件夹存放在retrieval-2016-deepvision-master/data/images/paris/data/paris目录下
+
+                           不要将12个文件夹合并！
+
+                           http://www.robots.ox.ac.uk/~vgg/data/parisbuildings/paris_120310.tgz    
+
+                                    下载后放在.data/images/paris目录下，解压命名文件夹为：groundtruth
+
+        ii)也可以运行data/images/paris下的get_paris.sh文件，以及data/images/oxford/下的get_oxford.sh文件进行下载。真的超级慢。
