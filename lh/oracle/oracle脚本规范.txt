@@ -1,0 +1,267 @@
+数据库升级脚本编写参考方案
+在使用补丁程序对现场进行升级时，可能安装过程出现问题，脚本执行一部分而无法回滚，所以需要编写的SQL脚本能够重复执行。为此给大家提供一些范例进行参考，减少大家编写升级脚本的时间，提高工作效率。
+
+一、	ORACLE
+1.	新增表，查找系统视图user_all_tables，如果不存在则执行创建语句
+declare
+ cnt integer;
+begin
+    select count(0)
+    into cnt  
+    from user_all_tables
+   where table_name = upper('NS_DATA_DICTIONARY');
+   
+    if cnt = 0 then
+	   execute immediate 'create table NS_DATA_DICTIONARY(
+			  DATA_TYPE  INTEGER,
+			  DATA_GROUP INTEGER,
+			  DATA_VALUE varchar2(50))';
+	end if;						 
+end;
+/
+
+2.	新增字段，查找系统视图user_tab_columns，如果不存在则执行新增语句
+declare
+  cnt integer;
+begin
+	select count(0)
+      into cnt	
+	  from user_tab_columns a
+	 where a.Table_name = upper('BMS_TX_PD')
+	   and a.COLUMN_NAME = upper('APPROVE_FLAG');
+	   
+    if cnt = 0 then
+	   execute immediate 'ALTER TABLE BMS_TX_PD ADD APPROVE_FLAG INTEGER';
+	end if;
+end;
+/
+
+3.	删除字段，查找系统视图user_tab_columns，如果已存在则执行删除语句
+
+declare
+  cnt integer;
+begin
+	select count(0)
+      into cnt
+	  from user_tab_columns a
+	 where a.Table_name = upper('BMS_TX_PD')
+	   and a.COLUMN_NAME = upper('APPROVE_FLAG');
+	   
+    if cnt = 1 then
+	 execute immediate 'ALTER TABLE BMS_TX_PD DROP COLUMN APPROVE_FLAG ';
+	end if;
+end;
+/
+
+4.	修改VARCHAR2字段长度，查找系统视图user_tab_columns，如果字段长度小于预期长度，则执行修改语句
+declare
+  cnt integer;
+begin
+  select count(0)
+      into cnt  
+    from user_tab_columns a
+   where a.Table_name = upper('CNTPENDINGJOB')
+     and a.COLUMN_NAME = upper('SOURCE')
+	 and a.DATA_LENGTH < 32;
+     
+    if cnt = 1 then
+	     execute immediate 'ALTER TABLE CNTPENDINGJOB modify SOURCE VARCHAR2(32)';
+	end if;
+end;
+/
+
+5.	修改字段为可空，查找系统视图user_tab_columns，如果字段存在且不可为空，则执行修改语句
+
+declare
+  cnt integer;
+begin
+  select count(0)
+      into cnt  
+    from user_tab_columns a
+   where a.Table_name = upper('BMS_TX_PD')
+     and a.COLUMN_NAME = upper('APPROVE_FLAG')
+     and a.NULLABLE = upper('N');
+     
+    if cnt = 1 then
+	     execute immediate 'ALTER TABLE BMS_TX_PD modify APPROVE_FLAG null';
+	  end if;
+end;
+/
+
+6.	修改字段类型
+declare
+  cnt integer;
+  tempCnt integer;
+  tempCnt2 integer;  
+begin
+  select count(0)
+    into cnt
+    from user_tab_columns a
+   where a.Table_name = upper('bmp_branch')
+     and a.COLUMN_NAME = upper('invalid_flag')
+     and a.DATA_TYPE = upper('VARCHAR2');
+
+    select count(0)
+      into tempCnt
+      from user_tab_columns a
+     where a.Table_name = upper('bmp_branch')
+       and a.COLUMN_NAME = upper('invalid_flag_1');
+       
+  if cnt = 0 then       
+    if tempCnt = 1 then
+      execute immediate '
+      select count(0)       
+        from dual
+       where exists (select null
+                       from bmp_branch a
+                      where a.invalid_flag_1 is not null)'  into tempCnt2;      
+    
+      if (tempCnt2 = 0) then
+          execute immediate 'alter table bmp_branch drop column invalid_flag_1';
+          execute immediate 'alter table bmp_branch add invalid_flag_1 integer';
+      end if;
+    else
+      tempCnt2 := 0;   
+      execute immediate 'alter table bmp_branch add invalid_flag_1 integer';
+    end if;
+    
+    if (tempCnt2 = 0) then
+      execute immediate 'update bmp_branch set invalid_flag_1 = invalid_flag';
+    end if;
+    
+    execute immediate 'update bmp_branch set invalid_flag = null';      
+    execute immediate 'alter table bmp_branch modify invalid_flag varchar2(10)';
+  end if;
+      
+  if (tempCnt > 0) then
+    execute immediate 'update bmp_branch set invalid_flag = to_char(invalid_flag_1)';         
+    execute immediate 'alter table bmp_branch drop column invalid_flag_1'; 
+  end if;
+end;
+/
+7.	新增序列
+declare
+ cnt integer;
+begin
+    select count(0)
+    into cnt  
+    from user_sequences a
+   where a.sequence_name = upper('BP_PB_ORDER_ORDERID_SEQ');
+   
+    if cnt = 0 then
+     execute immediate 'create sequence BP_PB_ORDER_ORDERID_SEQ
+        minvalue 1
+        maxvalue 999999999999999999999999999
+        start with 1
+        increment by 1
+        cache 20';
+  end if;             
+end;
+/
+
+8.	新增约束，查找系统视图user_constraints，如果不存在该约束，则进行创建
+declare
+ cnt integer;
+begin
+    select count(0)
+    into cnt  
+    from user_constraints a
+   where a.constraint_name = upper('NS_DATA_DICTIONARY_PK');
+    		
+    if cnt = 0 then
+        execute immediate 'alter table NS_DATA_DICTIONARY add constraint NS_DATA_DICTIONARY_PK primary key (DATA_TYPE, DATA_GROUP)';
+	end if;						 
+end;
+/
+9.	修改约束，首先查找约束是否存在，如果存在，先删除再创建
+declare
+  cnt integer;
+begin
+  select count(0)
+    into cnt
+    from user_constraints a
+   where a.constraint_name = upper('CKC_BANKTYPE_BP_BANK');
+   
+  if (cnt > 0) then
+    execute immediate 'alter table BP_BANK drop constraint CKC_BANKTYPE_BP_BANK';
+  end if;
+  
+  execute immediate 'alter table BP_BANK
+            add constraint CKC_BANKTYPE_BP_BANK
+            check (BankType  = 9 OR BankType  = 5 OR BankType  = 6
+           OR  BankType  = 2
+           OR  BankType  = 1
+           OR  BankType  = 0)';                      
+end;
+/
+10.	新增类型，首先删除TABLE的类型，然后删除ROW的类型，其次重新创建ROW的，最后创建TABLE的类型
+declare
+   cnt integer;
+begin
+  select count(0) 
+    into cnt  
+    from user_objects
+   where object_name = upper('Ns_GetAKmInfo_TAB');
+     
+  if cnt > 0 then
+      execute immediate 'drop type Ns_GetAKmInfo_TAB';
+  end if;
+
+  select count(0) 
+    into cnt  
+    from user_objects
+   where object_name = upper('Ns_GetAKmInfo_ROW');
+     
+  if cnt > 0 then
+      execute immediate 'drop type Ns_GetAKmInfo_ROW';
+  end if;
+  
+  execute immediate 'CREATE TYPE Ns_GetAKmInfo_ROW
+						as object
+						(
+						  YR         INTEGER ,
+						  KM         VARCHAR2(18) ,
+						  KMNAME     VARCHAR2(60) ,
+						  DIR        INTEGER ,
+						  KMGRP      VARCHAR2(6) ,
+						  KMLEVEL    INTEGER  ,
+						  ISLEAF     INTEGER   ,
+						  CASHTYPE   INTEGER  ,
+						  QTYFLAG    INTEGER  ,
+						  QTYUNIT    VARCHAR2(8),
+						  BUSINESS   INTEGER  ,
+						  OUTFLAG    INTEGER  ,
+						  LIMITMODE  INTEGER  ,
+						  QUOTA      NUMBER(15,2)  ,
+						  USESTATE   INTEGER ,
+						  KMPATH     VARCHAR2(255),
+						  ID         INTEGER ,
+						  BRNO       VARCHAR2(4),
+						  INTRFLAG   integer,
+						  MULTICOUNT integer
+						)';
+
+  execute immediate 'CREATE TYPE Ns_GetAKmInfo_TAB AS TABLE OF Ns_GetAKmInfo_ROW';
+end;
+/
+11.	新增数据，使用主键或者业务主键关联，避免插入报错或者插入多条重复数据。新增数据升级脚本编写较复杂，得根据具体情况进行分析
+insert into BP_BANK (BANKNO, BANKNAME, BANKTYPE, LASTEXGTIME) 
+select '93', '非直连银行', 5, null
+  from dual
+ where not exists (select null
+                     from BP_BANK
+					where BANKNO = '93');
+12、新建索引
+declare
+ cnt integer;
+begin
+    select count(0)
+    into cnt  
+    from user_indexes a
+   where a.index_name = upper('IX_CNTBUSSSHEET_NOTEGRP');
+        
+    if cnt = 0 then
+        execute immediate 'create index IX_CNTBUSSSHEET_NOTEGRP on CNTBUSSSHEET (BRNO, NOTEGRP)';
+  end if;             
+end;
+/
